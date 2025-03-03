@@ -36,26 +36,92 @@ class Second_Assistant {
     }
   }
 
+  async shouldQueryDatabase(userMessage) {
+    try {
+      const aiDecision = await axios.post(
+        "https://api.openai.com/v1/chat/completions",
+        {
+          model: "gpt-4-turbo",
+          messages: [
+            {
+              role: "system",
+              content: `Сенің міндетің — пайдаланушының хабарламасын талдап, дерекқорға (БД) жүгіну қажет пе, жоқ па екенін анықтау.  
+              Егер БД-ға жүгіну **қажет болса**, "yes" деп жауап бер. Егер **қажет болмаса**, "no" деп жауап бер.  
+              
+              #### БД-ға жүгінудің ҚАЖЕТІ ЖОҚ (жауап "no"):  
+              - "Сәлем!"  
+              - "Қалайсың?"  
+              - "Не істеп жатырсың?"  
+              - "Сау бол!"  
+              - "Сен не білесің?"  
+              - "Сенің мүмкіндіктерің қандай?"  
+              - "Сен кімсің?"  
+              
+              #### БД-ға жүгіну ҚАЖЕТ (жауап "yes"):  
+              - "Кредит алу үшін қандай құжаттар керек?"  
+              - "Сізде қандай қызметтер бар?"  
+              - "Бағаларыңыз қандай?"  
+              - "Мені ипотека қызықтырады."  
+              - "Мен бүгін несие төлей аламын ба?"  
+              - "Қалай тіркелуге болады?"  
+              - "Сіздер қайда орналасқансыздар?"  
+              
+              Сен **тек "yes" немесе "no" деп жауап беруің керек**. Басқа ештеңе жазба.  
+              `,
+            },
+            { role: "user", content: userMessage },
+          ],
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${openaiApiKey}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const decision = aiDecision.data.choices?.[0]?.message?.content
+        ?.trim()
+        .toLowerCase();
+      console.log("🔍 AI решение:", decision);
+
+      // Гарантируем, что ответ только "yes" или "no"
+      if (decision === "yes") return true;
+      if (decision === "no") return false;
+
+      console.warn("⚠️ Неожиданный ответ от AI:", decision);
+      return false; // Если ответ неожиданного формата, берем false по умолчанию
+    } catch (error) {
+      console.error("❌ Ошибка определения:", error.message);
+      return true; // Если произошла ошибка, безопаснее обратиться к БД
+    }
+  }
+
   async getAIResponse(phoneNumber, userMessage) {
     try {
       // Получаем последние 5 сообщений пользователя
       const previousMessages = await this.getLastMessages(phoneNumber);
       console.log({ "Чат пользователя": previousMessages });
 
-      // Запрашиваем релевантные данные из Pinecone
-      const response = await axios.post(
-        `${process.env.host}/pinecone/first/ai`,
-        { message: userMessage, phoneNumber: phoneNumber }
-      );
-      const databaseResults = response.data || [];
-      console.log({ databaseResults });
+      let databaseResults = [];
+
+      // Проверяем, нужно ли обращаться к БД
+      const queryDatabase = await this.shouldQueryDatabase(userMessage);
+      if (queryDatabase) {
+        const response = await axios.post(
+          `${process.env.host}/pinecone/first/ai`,
+          { message: userMessage, phoneNumber }
+        );
+        databaseResults = response.data || [];
+        console.log({ databaseResults: databaseResults });
+      }
 
       let prompt = userMessage;
       if (databaseResults.length > 0) {
         const combinedAnswers = databaseResults
           .map((res) => res.metadata.answer)
           .join("\n");
-        prompt = `Пайдаланушының хабарламасы: "${userMessage}"\n\n База данныхтан табылған ақпарат:\n${combinedAnswers}`;
+        prompt = `Пайдаланушының соңғы хабарламасы: "${userMessage}"\n\n База данныхтан табылған ақпарат:\n${combinedAnswers}`;
       }
 
       const systemMessage = {
@@ -86,7 +152,7 @@ class Second_Assistant {
         
         📝 Жауап үлгілері:
         ✅ Егер пайдаланушының сұрағына жауап базадан табылса былай жауап бересін:
-        "(Егер пайдаланушы хабарламаны амандасудан бастаса, жауапты амандасудан бастайсын. Егер хабарламаны амандасусыз бастаса, сұраққа амандасусыз жауап бересің. ),  Бұл қызметке мыналар кіреді: [қызмет сипаттамасы]. Сізге осы қызмет қажет пе?"
+        "(Егер пайдаланушының соңғы хабарламасы  амандасудан басталса, жауапты амандасудан бастайсын. Егер пайдаланушының соңғы хабарламасы амандасусыз басталса, сұраққа амандасусыз жауап бересің. ),  Бұл қызметке мыналар кіреді: [қызмет сипаттамасы]. Сізге осы қызмет қажет пе?"
         
         ⚠️ Егер база ақпарат тапса, бірақ ол сұранысқа нақты жауап болмаса:
         "База бойынша табылған ақпарат: [ақпарат]. Бірақ бұл сіз іздеген ақпарат па? Нақтыласаңыз, мен сізге жақсырақ көмектесе аламын!"

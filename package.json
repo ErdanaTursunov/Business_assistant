@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon index_whatsapp.js"
+    "start": "node index_whatsapp.js"
   },
   "author": "",
   "license": "ISC",

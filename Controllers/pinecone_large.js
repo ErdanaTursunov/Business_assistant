@@ -44,16 +44,16 @@ class PineconeLarge {
         includeMetadata: true,
       });
 
-      if (!results.matches.length) {
+      if (!results.matches || results.matches.length === 0) {
         return res.json([]); // Если ничего не найдено, возвращаем пустой массив
       }
 
-      // Определяем наивысший score
-      const maxScore = results.matches[0].score;
+      const MIN_SCORE_THRESHOLD = 0.4;
+      const maxScore = results.matches[0]?.score || 0;
 
-      // Фильтруем: оставляем только те, у которых score >= 90% от maxScore
+      // Фильтруем: оставляем только те, у которых score >= 90% от maxScore и не ниже порога
       const filteredResults = results.matches.filter(
-        (match) => match.score >= maxScore * 0.9
+        (match) => match.score >= Math.max(maxScore * 0.9, MIN_SCORE_THRESHOLD)
       );
 
       res.json(filteredResults);

@@ -33,10 +33,13 @@ class First_Assistant {
           messages: [
             {
               role: "system",
-              content:
-                "Ты удаляешь только вежливые фразы (приветствия, благодарности), но сохраняешь весь смысл сообщения.",
+              content: `Ты удаляешь только вежливые фразы (приветствия, благодарности). 
+                        Не меняй смысл сообщения, не добавляй объяснения и не перефразируй текст.`,
             },
-            { role: "user", content: `Очисти это сообщение: "${message}"` },
+            {
+              role: "user",
+              content: `Очисти это сообщение, удалив только вежливые фразы: "${message}"`,
+            },
           ],
         },
         {
@@ -46,14 +49,13 @@ class First_Assistant {
           },
         }
       );
-  
+
       return response.data.choices[0].message.content.trim();
     } catch (error) {
       console.error("Ошибка очистки сообщения:", error.message);
       return message;
     }
   }
-  
 
   async addContextIfNeeded(message, previousMessages) {
     try {

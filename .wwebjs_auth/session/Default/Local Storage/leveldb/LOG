@@ -1,2 +1,3 @@
-2025/03/03-05:12:46.014 fbc Creating DB C:\Users\Acer\Desktop\Ассистент\.wwebjs_auth\session\Default\Local Storage\leveldb since it was missing.
-2025/03/03-05:12:46.093 fbc Reusing MANIFEST C:\Users\Acer\Desktop\Ассистент\.wwebjs_auth\session\Default\Local Storage\leveldb/MANIFEST-000001
+2025/03/03-15:18:42.852 468c Reusing MANIFEST C:\Users\Acer\Desktop\Ассистент\.wwebjs_auth\session\Default\Local Storage\leveldb/MANIFEST-000001
+2025/03/03-15:18:42.872 468c Recovering log #3
+2025/03/03-15:18:42.873 468c Reusing old log C:\Users\Acer\Desktop\Ассистент\.wwebjs_auth\session\Default\Local Storage\leveldb/000003.log 
