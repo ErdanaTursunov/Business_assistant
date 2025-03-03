@@ -2,8 +2,8 @@ require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
+const path = require("path");
 const qrcode = require("qrcode");
-const qrcodeTerminal = require("qrcode-terminal");
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const axios = require("axios");
 
@@ -19,6 +19,9 @@ app.use(cors({ origin: "*" }));
 app.use(express.json());
 app.use(bodyParser.json());
 
+// Раздача статических файлов (index.html для QR-кода)
+app.use(express.static(path.join(__dirname, "public")));
+
 app.use("/weaviate", Weaviate_router);
 app.use("/pinecone", Pinecone_router);
 
@@ -26,12 +29,17 @@ const client = new Client({
   authStrategy: new LocalAuth(),
 });
 
-let lastQrCode = null; // Переменная для хранения QR-кода
+let lastQrCode = null; // Хранение последнего QR-кода
 
-client.on("qr", (qr) => {
-  lastQrCode = qr; // Сохраняем последний QR-код
-  console.log("📱 Отсканируйте QR-код для входа в WhatsApp:");
-  qrcodeTerminal.generate(qr, { small: true }); // Вывод QR-кода в консоли
+client.on("qr", async (qr) => {
+  lastQrCode = qr; // Сохранение QR-кода
+  console.log("📱 Отсканируйте QR-код для входа в WhatsApp");
+
+  // Генерация QR-кода в консоли
+  qrcode.toString(qr, { type: "terminal" }, (err, url) => {
+    if (err) console.error("Ошибка генерации QR-кода:", err);
+    console.log(url);
+  });
 });
 
 client.on("ready", () => {
@@ -44,7 +52,7 @@ client.on("message", async (message) => {
   console.log(`📩 Новое сообщение от ${message.from}: ${message.body}`);
 
   try {
-    // Сохранение сообщения пользователя в базу данных
+    // Сохранение сообщения в базе данных
     await Message.create({
       phone_number: message.from,
       message: message.body,
@@ -53,58 +61,60 @@ client.on("message", async (message) => {
     // Удаление старых сообщений (храним только 5 последних)
     const userMessages = await Message.findAll({
       where: { phone_number: message.from },
-      order: [["created_at", "DESC"]],
+      order: [["createdAt", "DESC"]],
     });
 
     if (userMessages.length > 5) {
-      const messagesToDelete = userMessages.slice(5); // Оставляем только последние 5
+      const messagesToDelete = userMessages.slice(5);
       await Promise.all(messagesToDelete.map((msg) => msg.destroy()));
     }
 
-    // Отправка запроса к AI
+    // Запрос к AI
     const response = await axios.post(`${process.env.host}/pinecone/second/ai`, {
       query: message.body,
-      phoneNumber: message.from
+      phoneNumber: message.from,
     });
 
-    const aiResponse = response.data?.answer || "Ошибка в AI-ответе";
+    const aiResponse = response.data?.answer || "⚠️ Ошибка в AI-ответе";
     await client.sendMessage(message.from, aiResponse);
   } catch (error) {
-    console.error("❌ Ошибка:", error.message);
-    await client.sendMessage(
-      message.from,
-      "⚠️ Ошибка обработки запроса. Попробуйте позже."
-    );
+    console.error("❌ Ошибка обработки сообщения:", error);
+    await client.sendMessage(message.from, "⚠️ Ошибка сервера. Попробуйте позже.");
   }
 });
 
 client.initialize();
 
-// Маршрут для отображения QR-кода в браузере
-app.get("/qr", async (req, res) => {
-  if (!lastQrCode) return res.status(404).send("QR-код ещё не сгенерирован");
+// 📌 Маршрут для получения QR-кода в виде изображения
+app.get("/qr-image", async (req, res) => {
+  if (!lastQrCode) {
+    return res.status(404).send("QR-код ещё не сгенерирован");
+  }
 
-  const qrImage = await qrcode.toDataURL(lastQrCode);
-  res.send(`<img src="${qrImage}" alt="QR Code" />`);
+  try {
+    const qrImage = await qrcode.toDataURL(lastQrCode);
+    const imgBuffer = Buffer.from(qrImage.split(",")[1], "base64");
+    res.writeHead(200, { "Content-Type": "image/png" });
+    res.end(imgBuffer);
+  } catch (error) {
+    console.error("Ошибка генерации QR-кода:", error);
+    res.status(500).send("Ошибка генерации QR-кода");
+  }
 });
 
 const start = async () => {
   try {
-    sequelize
-      .sync({ alter: "true" })
-      .then(() => console.log("Успешное синхронизация к PostgreSQL! 🚀"))
-      .catch((err) => console.error("Ошибка подключения:", err));
+    await sequelize.sync({ alter: true });
+    console.log("✅ База данных синхронизирована!");
 
-    sequelize
-      .authenticate()
-      .then(() => console.log("Успешное подключение к PostgreSQL! 🚀"))
-      .catch((err) => console.error("Ошибка подключения:", err));
+    await sequelize.authenticate();
+    console.log("✅ Подключение к базе данных установлено!");
 
     app.listen(PORT, () => {
       console.log(`🚀 Сервер работает на порту ${PORT}`);
     });
-  } catch (e) {
-    console.log("❌ Ошибка запуска сервера:", e);
+  } catch (error) {
+    console.error("❌ Ошибка запуска сервера:", error);
   }
 };
 
