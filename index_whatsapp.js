@@ -52,12 +52,6 @@ client.on("message", async (message) => {
   console.log(`📩 Новое сообщение от ${message.from}: ${message.body}`);
 
   try {
-    // Сохранение сообщения в базе данных
-    await Message.create({
-      phone_number: message.from,
-      message: message.body,
-    });
-
     // Удаление старых сообщений (храним только 5 последних)
     const userMessages = await Message.findAll({
       where: { phone_number: message.from },
@@ -70,16 +64,22 @@ client.on("message", async (message) => {
     }
 
     // Запрос к AI
-    const response = await axios.post(`${process.env.host}/pinecone/second/ai`, {
-      query: message.body,
-      phoneNumber: message.from,
-    });
+    const response = await axios.post(
+      `${process.env.host}/pinecone/second/ai`,
+      {
+        query: message.body,
+        phoneNumber: message.from,
+      }
+    );
 
     const aiResponse = response.data?.answer || "⚠️ Ошибка в AI-ответе";
     await client.sendMessage(message.from, aiResponse);
   } catch (error) {
     console.error("❌ Ошибка обработки сообщения:", error);
-    await client.sendMessage(message.from, "⚠️ Ошибка сервера. Попробуйте позже.");
+    await client.sendMessage(
+      message.from,
+      "⚠️ Ошибка сервера. Попробуйте позже."
+    );
   }
 });
 
