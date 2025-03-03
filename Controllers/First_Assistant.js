@@ -34,7 +34,7 @@ class First_Assistant {
             {
               role: "system",
               content:
-                "Ты удаляешь из сообщения приветствия и вежливые фразы, оставляя только суть.",
+                "Ты удаляешь только вежливые фразы (приветствия, благодарности), но сохраняешь весь смысл сообщения.",
             },
             { role: "user", content: `Очисти это сообщение: "${message}"` },
           ],
@@ -46,13 +46,14 @@ class First_Assistant {
           },
         }
       );
-
+  
       return response.data.choices[0].message.content.trim();
     } catch (error) {
       console.error("Ошибка очистки сообщения:", error.message);
       return message;
     }
   }
+  
 
   async addContextIfNeeded(message, previousMessages) {
     try {
@@ -63,10 +64,9 @@ class First_Assistant {
           messages: [
             {
               role: "system",
-              content: `Ты анализируешь, связано ли новое сообщение с предыдущими. 
-                                  Если да — уточняешь контекст. 
-                                  Если нет — оставляешь как есть.
-                                  Не меняй смысл и не добавляй ненужных слов.`,
+              content: `Ты дополняешь новое сообщение контекстом, если оно неполное. 
+                        Если сообщение понятно само по себе, ты не меняешь его. 
+                        Не добавляй описания смысла, просто скорректируй текст, если это необходимо.`,
             },
             {
               role: "user",
@@ -111,12 +111,9 @@ class First_Assistant {
       );
       console.log("📌 Итоговый запрос в векторную базу:", finalQuery);
 
-      const response = await axios.post(
-        `${process.env.host}/pinecone/search`,
-        {
-          query: finalQuery,
-        }
-      );
+      const response = await axios.post(`${process.env.host}/pinecone/search`, {
+        query: finalQuery,
+      });
 
       return res.status(200).json(response.data);
     } catch (error) {
