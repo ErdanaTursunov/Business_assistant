@@ -104,8 +104,8 @@ app.get("/qr-image", async (req, res) => {
 
 const start = async () => {
   try {
-    await sequelize.sync({ alter: true });
-    console.log("✅ База данных синхронизирована!");
+    // await sequelize.sync({ alter: true });
+    // console.log("✅ База данных синхронизирована!");
 
     await sequelize.authenticate();
     console.log("✅ Подключение к базе данных установлено!");

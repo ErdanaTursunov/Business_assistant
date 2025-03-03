@@ -17,6 +17,10 @@ app.use("/pinecone", Pinecone_router);
 
 const start = async () => {
   try {
+
+    // await sequelize.sync({ alter: true });
+    // console.log("✅ База данных синхронизирована!");
+
     // Проверяем подключение
     sequelize
       .authenticate()

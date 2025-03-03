@@ -17,7 +17,20 @@ class First_Assistant {
         limit: 5,
       });
 
-      return messages.map((msg) => msg.message);
+      if (messages.length === 0) return [];
+
+      return [
+        {
+          role: "system",
+          content: "Пайдаланушының алдыңғы сообщениялары:",
+        },
+        ...messages.flatMap((msg) => [
+          { role: "user", content: msg.message },
+          ...(msg.ai_response
+            ? [{ role: "assistant", content: msg.ai_response }]
+            : []),
+        ]),
+      ];
     } catch (error) {
       console.error("Ошибка получения сообщений:", error.message);
       return [];
@@ -59,6 +72,14 @@ class First_Assistant {
 
   async addContextIfNeeded(message, previousMessages) {
     try {
+      // Формируем текстовую версию истории сообщений
+      const historyText = previousMessages
+        .map(
+          (msg) =>
+            `${msg.role === "user" ? "Пользователь" : "AI"}: ${msg.content}`
+        )
+        .join("\n");
+
       const response = await axios.post(
         "https://api.openai.com/v1/chat/completions",
         {
@@ -66,15 +87,12 @@ class First_Assistant {
           messages: [
             {
               role: "system",
-              content: `Ты дополняешь новое сообщение контекстом, если оно неполное. 
-                        Если сообщение понятно само по себе, ты не меняешь его. 
-                        Не добавляй описания смысла, просто скорректируй текст, если это необходимо.`,
+              content: `Ты исправляешь новое сообщение, чтобы оно стало конкретным и понятным, 
+                        но не добавляешь свои размышления и объяснения.`,
             },
             {
               role: "user",
-              content: `История сообщений:\n${previousMessages.join(
-                "\n"
-              )}\n\nНовое сообщение: "${message}"\n\nСкорректируй его, если нужно, иначе оставь без изменений:`,
+              content: `История сообщений:\n${historyText}\n\nНовое сообщение: "${message}"\n\nПерефразируй его так, чтобы оно было чётким и полным, но без дополнительных объяснений:`,
             },
           ],
         },
