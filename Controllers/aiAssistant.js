@@ -221,7 +221,7 @@ class AIAssistant {
       const response = await axios.post(
         "https://api.openai.com/v1/chat/completions",
         {
-          model: "gpt-4-turbo",
+          model: "gpt-4o-mini",
           messages,
         },
         {

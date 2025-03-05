@@ -5,6 +5,7 @@ const cors = require("cors");
 const Pinecone_router = require("./routes/Pinecone_router");
 const Weaviate_router = require("./routes/Weaviate_router");
 const sequelize = require("./db");
+const ai_router = require("./routes/Ai_router");
 
 const PORT = process.env.PORT || 4000;
 const app = express();
@@ -14,6 +15,7 @@ app.use(bodyParser.json());
 
 app.use("/weaviate", Weaviate_router);
 app.use("/pinecone", Pinecone_router);
+app.use("/ai", ai_router);
 
 const start = async () => {
   try {

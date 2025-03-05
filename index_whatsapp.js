@@ -11,6 +11,7 @@ const Pinecone_router = require("./routes/Pinecone_router");
 const Weaviate_router = require("./routes/Weaviate_router");
 const sequelize = require("./db");
 const Message = require("./models/Message");
+const ai_router = require("./routes/Ai_router");
 
 const PORT = process.env.PORT || 4000;
 const app = express();
@@ -24,6 +25,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 app.use("/weaviate", Weaviate_router);
 app.use("/pinecone", Pinecone_router);
+app.use("/ai", ai_router);
 
 const client = new Client({
   authStrategy: new LocalAuth(),
@@ -65,7 +67,7 @@ client.on("message", async (message) => {
 
     // Запрос к AI
     const response = await axios.post(
-      `${process.env.host}/pinecone/second/ai`,
+      `${process.env.host}/ai/chat`,
       {
         query: message.body,
         phoneNumber: message.from,
