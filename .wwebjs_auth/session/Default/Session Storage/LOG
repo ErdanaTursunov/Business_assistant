@@ -1,2 +1,3 @@
-2025/03/03-19:29:46.407 4ec0 Creating DB C:\Users\Acer\Desktop\Ассистент\.wwebjs_auth\session\Default\Session Storage since it was missing.
-2025/03/03-19:29:46.425 4ec0 Reusing MANIFEST C:\Users\Acer\Desktop\Ассистент\.wwebjs_auth\session\Default\Session Storage/MANIFEST-000001
+2025/03/05-16:05:54.702 351c Reusing MANIFEST C:\Users\Acer\Desktop\Ассистент\.wwebjs_auth\session\Default\Session Storage/MANIFEST-000001
+2025/03/05-16:05:54.722 351c Recovering log #3
+2025/03/05-16:05:54.722 351c Reusing old log C:\Users\Acer\Desktop\Ассистент\.wwebjs_auth\session\Default\Session Storage/000003.log 

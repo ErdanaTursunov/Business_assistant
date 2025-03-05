@@ -54,27 +54,13 @@ client.on("message", async (message) => {
   console.log(`📩 Новое сообщение от ${message.from}: ${message.body}`);
 
   try {
-    // Удаление старых сообщений (храним только 5 последних)
-    const userMessages = await Message.findAll({
-      where: { phone_number: message.from },
-      order: [["createdAt", "DESC"]],
+    // Запрос к AI
+    const response = await axios.post(`${process.env.host}/ai/chat`, {
+      question: message.body,
+      phoneNumber: message.from,
     });
 
-    if (userMessages.length > 5) {
-      const messagesToDelete = userMessages.slice(5);
-      await Promise.all(messagesToDelete.map((msg) => msg.destroy()));
-    }
-
-    // Запрос к AI
-    const response = await axios.post(
-      `${process.env.host}/ai/chat`,
-      {
-        query: message.body,
-        phoneNumber: message.from,
-      }
-    );
-
-    const aiResponse = response.data?.answer || "⚠️ Ошибка в AI-ответе";
+    const aiResponse = response.data?.response || "⚠️ Ошибка в AI-ответе";
     await client.sendMessage(message.from, aiResponse);
   } catch (error) {
     console.error("❌ Ошибка обработки сообщения:", error);
