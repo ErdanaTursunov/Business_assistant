@@ -28,8 +28,14 @@ app.use("/weaviate", Weaviate_router);
 app.use("/pinecone", Pinecone_router);
 app.use("/ai", ai_router);
 
+// Инициализация WhatsApp клиента
 const client = new Client({
   authStrategy: new LocalAuth(),
+  puppeteer: {
+    executablePath: '/usr/bin/google-chrome', // путь к установленному браузеру
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  }
 });
 
 let lastQrCode = null;
@@ -51,7 +57,9 @@ client.on("ready", () => {
 client.on("message", async (message) => {
   if (message.isGroupMsg || message.fromMe || message.author) return;
 
-  console.log(`📩 [${new Date().toLocaleTimeString()}] Сообщение от ${message.from}: ${message.body}`);
+  console.log(
+    `📩 [${new Date().toLocaleTimeString()}] Сообщение от ${message.from}: ${message.body}`
+  );
 
   try {
     const userMessages = await Message.findAll({
@@ -63,16 +71,21 @@ client.on("message", async (message) => {
       await Promise.all(userMessages.slice(5).map((msg) => msg.destroy()));
     }
 
+    // Важно: убедись, что process.env.host настроена на публичный URL твоего сервиса в Railway.
     const response = await axios.post(`${process.env.host}/ai/chat`, {
       question: message.body,
       phoneNumber: message.from,
     });
 
-    const aiResponse = response.data?.response || "⚠️ Ошибка обработки запроса AI.";
+    const aiResponse =
+      response.data?.response || "⚠️ Ошибка обработки запроса AI.";
     await client.sendMessage(message.from, aiResponse);
   } catch (error) {
     console.error(`❌ Ошибка обработки сообщения: ${error.message}`);
-    await client.sendMessage(message.from, "⚠️ Ошибка сервера. Попробуйте позже.");
+    await client.sendMessage(
+      message.from,
+      "⚠️ Ошибка сервера. Попробуйте позже."
+    );
   }
 });
 
@@ -96,8 +109,9 @@ const start = async () => {
     await sequelize.authenticate();
     console.log("✅ База данных подключена!");
 
-    app.listen(PORT, () => {
-      console.log(`🚀 Сервер запущен: http://localhost:${PORT}`);
+    // Здесь изменяем запуск сервера:
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`🚀 Сервер запущен и доступен на порту ${PORT}`);
     });
   } catch (error) {
     console.error("❌ Ошибка при запуске сервера:", error.message);
