@@ -11,8 +11,9 @@ class AIController {
   async analyze(req, res) {
     try {
       const { question, phoneNumber } = req.body;
-      if (!question || !phoneNumber)
+      if (!question || !phoneNumber) {
         return res.status(400).json({ error: "Сұрақ міндетті түрде қажет" });
+      }
 
       // 1️⃣ Загружаем историю сообщений пользователя
       const history = await Message.findAll({
@@ -21,35 +22,33 @@ class AIController {
         limit: 2,
       });
 
-      const messages = history
-        .map((msg) => [
-          { role: "user", content: msg.message },
-          { role: "assistant", content: msg.ai_response },
-        ])
-        .flat();
+      const messages = history.flatMap((msg) => [
+        { role: "user", content: msg.message },
+        { role: "assistant", content: msg.ai_response },
+      ]);
 
       messages.push({ role: "user", content: question });
 
       // 2️⃣ Запрос AI для анализа контекста
       const prompt = `
-Сен пайдаланушының сұрағын және оның алдыңғы сұхбатын талдайсың.
-Міндетің – осы сұраққа жауап беру үшін векторлық дерекқордан ақпарат алу қажет пе, жоқ па, соны анықтау.
-Тек "иә" немесе "жоқ" деп жауап бер.
+      Сен пайдаланушының сұрағын және оның алдыңғы сұхбатын талдайсың.
+      Міндетің – осы сұраққа жауап беру үшін векторлық дерекқордан ақпарат алу қажет пе, жоқ па, соны анықтау.
+      Тек "иә" немесе "жоқ" деп жауап бер.
+      
+      📌 "иә" деп жауап бер, егер сұрақ немесе сөйлемнің мағынасы ақпарат алуды білдірсе.
+      
+      ❌ "жоқ" деп жауап бер:
+      - Егер пайдаланушы тек амандасса, қоштасса немесе сыпайылық білдірсе.
+      - Егер сұрақ диалогты жалғастыруға арналған, бірақ жаңа ақпарат сұрамаса.
+      - Егер сұрақ нақты операторға бағытталған.
+      
+      ✅ Барлық басқа жағдайларда "иә" деп жауап бер, **тіпті сұрақ толық болмаса да**.
+      
+      🔹 Пайдаланушы сұрағы: "${question}"
+      🔹 Соңғы хабарламалар:
+      ${messages.map((m) => `- ${m.role}: ${m.content}`).join("\n")}
+      `.trim();
 
-📌 Әдетте, әр сұрақ үшін векторлық дерекқорға жүгіну қажет. Бірақ кейбір жағдайларда бұл қажет емес:
-
-❌ "жоқ" деп жауап бер:
-- Егер сұрақ тек амандасу, қоштасу немесе сыпайылық білдіруге арналған болса (мысалы, "Сәлем", "Қалыңыз қалай?", "Рахмет").
-- Егер сұрақ тек диалогты жалғастыру үшін қойылса, бірақ жаңа ақпарат сұрамаса (мысалы, "Тағы түсіндіріңіз", "Қайталап жіберіңіз").
-- Егер сұрақ AI-мен емес, тікелей оператормен немесе басқа қызметпен байланысты (мысалы, "Адам оператор керек", "Менің нөмірімді өзгертіңіз").
-- Егер сұрақ мағынасыз немесе түсініксіз болса.
-
-✅ Барлық басқа жағдайларда "иә" деп жауап бер.
-
-🔹 Пайдаланушы сұрағы: "${question}"
-🔹 Соңғы хабарламалар:\n
-${messages.map((m) => `- ${m.role}: ${m.content}`).join("\n")}
-`;
       // 3️⃣ Отправляем запрос AI
       const response = await axios.post(
         OPENAI_URL,
@@ -66,18 +65,25 @@ ${messages.map((m) => `- ${m.role}: ${m.content}`).join("\n")}
         }
       );
 
+      // Проверяем, что OpenAI вернул корректный ответ
+      if (!response.data.choices || response.data.choices.length === 0) {
+        throw new Error("OpenAI не вернул корректный ответ");
+      }
+
       console.log(
-        "Токены, использованные в запросе analyze :",
-        response.data.usage.total_tokens
+        "Токены, использованные в запросе analyze:",
+        response.data.usage?.total_tokens || "Нет данных"
       );
-      const decision = response.data.choices[0].message.content.toLowerCase();
+
+      const decision =
+        response.data.choices[0]?.message?.content?.toLowerCase() || "";
       console.log({ decision });
 
       const needsSearch = decision.includes("иә");
 
       res.json({ needsSearch });
     } catch (error) {
-      console.error("🚨 AI Анализатор қатесі:", error);
+      console.error("🚨 AI Анализатор қатесі:", error.message || error);
       res.status(500).json({ error: "Сервер қатесі" });
     }
   }
@@ -94,7 +100,7 @@ ${messages.map((m) => `- ${m.role}: ${m.content}`).join("\n")}
       const history = await Message.findAll({
         where: { phone_number: phoneNumber },
         order: [["created_at", "ASC"]],
-        limit: 3,
+        limit: 2,
       });
 
       // 2️⃣ Тарихты OpenAI үшін форматтау
@@ -167,7 +173,7 @@ ${messages.map((m) => `- ${m.role}: ${m.content}`).join("\n")}
       const history = await Message.findAll({
         where: { phone_number: phoneNumber },
         order: [["created_at", "ASC"]],
-        limit: 3,
+        limit: 2,
       });
 
       const messages = history

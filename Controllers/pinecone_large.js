@@ -31,7 +31,7 @@ class PineconeLarge {
 
   async searchPinecone(req, res) {
     try {
-      const { query, topK = 1 } = req.body;
+      const { query, topK = 5 } = req.body;
 
       if (!query) {
         return res.status(400).json({ error: "Отсутствует запрос" });
@@ -48,7 +48,7 @@ class PineconeLarge {
         return res.json([]); // Если ничего не найдено, возвращаем пустой массив
       }
 
-      const MIN_SCORE_THRESHOLD = 0.4;
+      const MIN_SCORE_THRESHOLD = 0.5;
       const maxScore = results.matches[0]?.score || 0;
 
       // Фильтруем: оставляем только те, у которых score >= 90% от maxScore и не ниже порога
@@ -66,24 +66,24 @@ class PineconeLarge {
   async addToPinecone(req, res) {
     try {
       let { data } = req.body; // Ожидаем массив объектов [{ text, answer }]
-
+  
       if (!Array.isArray(data) || data.length === 0) {
         return res.status(400).json({ error: "Отсутствует текст" });
       }
-
+  
       const records = await Promise.all(
         data.map(async (item) => {
           if (!item.text) {
             throw new Error("Отсутствует текст у одного из объектов");
           }
-
+  
           const vector = await this.embedText(item.text);
           const id = crypto
             .createHash("md5")
             .update(item.text)
             .digest("hex")
             .slice(0, 8); // Короткий ID
-
+  
           return {
             id,
             values: vector,
@@ -94,14 +94,18 @@ class PineconeLarge {
           };
         })
       );
-
+  
       await index.upsert(records);
-      res.json({ message: "Данные добавлены" });
+  
+      // Возвращаем только ID
+      const savedIds = records.map((record) => record.id);
+      res.json({ message: "Данные добавлены", ids: savedIds });
     } catch (error) {
       console.error("Ошибка при добавлении в Pinecone:", error);
       res.status(500).json({ error: "Ошибка сервера" });
     }
   }
+  
 }
 
 module.exports = new PineconeLarge();
