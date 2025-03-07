@@ -81,7 +81,7 @@ class AIController {
 
       const needsSearch = decision.includes("иә");
 
-      res.json({ needsSearch });
+      res.json("Yes");
     } catch (error) {
       console.error("🚨 AI Анализатор қатесі:", error.message || error);
       res.status(500).json({ error: "Сервер қатесі" });

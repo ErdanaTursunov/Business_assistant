@@ -32,10 +32,11 @@ app.use("/ai", ai_router);
 const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
-    executablePath: '/usr/bin/google-chrome', // путь к установленному браузеру
+    executablePath:
+      process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/google-chrome-stable",
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  }
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  },
 });
 
 let lastQrCode = null;
@@ -58,7 +59,9 @@ client.on("message", async (message) => {
   if (message.isGroupMsg || message.fromMe || message.author) return;
 
   console.log(
-    `📩 [${new Date().toLocaleTimeString()}] Сообщение от ${message.from}: ${message.body}`
+    `📩 [${new Date().toLocaleTimeString()}] Сообщение от ${message.from}: ${
+      message.body
+    }`
   );
 
   try {
