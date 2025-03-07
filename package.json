@@ -24,5 +24,6 @@
     "sequelize": "^6.37.5",
     "weaviate-client": "^3.3.6",
     "whatsapp-web.js": "^1.26.0"
+    "puppeteer": "^18.2.1"
   }
 }
