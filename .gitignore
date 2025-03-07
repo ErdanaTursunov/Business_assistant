@@ -6,20 +6,3 @@ package-lock.json
 
 # 📌 Исключаем файл с переменными окружения (⚠️ ВАЖНО!)
 .env
-
-# 📌 Исключаем файлы логов
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# 📌 Исключаем кэш и временные файлы
-.DS_Store
-*.swp
-*.swo
-*.swn
-
-# 📌 Исключаем файлы сборки (если используешь)
-dist/
-build/
