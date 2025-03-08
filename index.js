@@ -29,7 +29,7 @@ const start = async () => {
       .then(() => console.log("Успешное подключение к PostgreSQL! 🚀"))
       .catch((err) => console.error("Ошибка подключения:", err));
 
-    app.listen(PORT, () => {
+    app.listen(PORT, "0.0.0.0", () => {
       console.log(`Сервер работает на порту ${PORT}`);
     });
   } catch (e) {

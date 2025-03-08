@@ -4,7 +4,7 @@ const axios = require("axios");
 const Message = require("../models/Message");
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
-const PINECONE_URL = "http://localhost:4000/pinecone/search";
+
 const TEMPERATURE = 0.3;
 
 class AIController {
@@ -81,7 +81,7 @@ class AIController {
 
       const needsSearch = decision.includes("иә");
 
-      res.json("Yes");
+      res.json({needsSearch});
     } catch (error) {
       console.error("🚨 AI Анализатор қатесі:", error.message || error);
       res.status(500).json({ error: "Сервер қатесі" });
@@ -148,8 +148,9 @@ class AIController {
         clarificationResponse.data.choices[0].message.content.trim();
       console.log(`Нақтыланған сұрақ: ${clarifiedQuery}`);
 
+      const apiHost = process.env.host;
       // 4️⃣ Векторлық базаға жіберу
-      const pineconeResponse = await axios.post(PINECONE_URL, {
+      const pineconeResponse = await axios.post(`${apiHost}/pinecone/search/`, {
         query: clarifiedQuery, // Түзетілген сұрақты жібереміз
       });
 
@@ -330,6 +331,7 @@ class AIController {
           query: question,
           phoneNumber,
         });
+
         console.log("🔎 Search Result:", searchResponse.data);
         searchResult = searchResponse.data.searchResult;
       }

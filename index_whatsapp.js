@@ -1,12 +1,12 @@
 require("dotenv").config();
 const express = require("express");
-const bodyParser = require("body-parser");
 const cors = require("cors");
 const path = require("path");
 const qrcode = require("qrcode");
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const axios = require("axios");
 
+// Импорт роутеров и базы данных
 const Pinecone_router = require("./routes/Pinecone_router");
 const Weaviate_router = require("./routes/Weaviate_router");
 const sequelize = require("./db");
@@ -18,73 +18,50 @@ const app = express();
 
 app.use(cors({ origin: "*" }));
 app.use(express.json());
-app.use(bodyParser.json());
-
-// Раздача статических файлов
 app.use(express.static(path.join(__dirname, "public")));
 
-// Маршруты
 app.use("/weaviate", Weaviate_router);
 app.use("/pinecone", Pinecone_router);
 app.use("/ai", ai_router);
 
-// Инициализация WhatsApp клиента
+// Инициализация клиента WhatsApp с LocalAuth
 const client = new Client({
   authStrategy: new LocalAuth(),
-  puppeteer: {
-    executablePath:
-      process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/google-chrome-stable",
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  },
 });
 
 let lastQrCode = null;
 
+// При получении QR-кода сохраняем его и выводим в консоль
 client.on("qr", async (qr) => {
   lastQrCode = qr;
-  console.log("\n📱 Отсканируйте QR-код для входа в WhatsApp\n");
-
+  console.log("📱 Отсканируйте QR-код для входа в WhatsApp");
   qrcode.toString(qr, { type: "terminal" }, (err, url) => {
-    if (err) return console.error("❌ Ошибка генерации QR-кода:", err);
+    if (err) console.error("Ошибка генерации QR-кода:", err);
     console.log(url);
   });
 });
 
+// Когда клиент готов, выводим сообщение
 client.on("ready", () => {
-  console.log("✅ WhatsApp-бот подключён и готов к работе!");
+  console.log("✅ WhatsApp-бот запущен и готов к работе!");
 });
 
+// Обработка входящих сообщений
 client.on("message", async (message) => {
+  // Игнорируем сообщения из групп и сообщения, отправленные самим собой
   if (message.isGroupMsg || message.fromMe || message.author) return;
-
-  console.log(
-    `📩 [${new Date().toLocaleTimeString()}] Сообщение от ${message.from}: ${
-      message.body
-    }`
-  );
+  console.log(`📩 Новое сообщение от ${message.from}: ${message.body}`);
 
   try {
-    const userMessages = await Message.findAll({
-      where: { phone_number: message.from },
-      order: [["createdAt", "DESC"]],
-    });
-
-    if (userMessages.length > 5) {
-      await Promise.all(userMessages.slice(5).map((msg) => msg.destroy()));
-    }
-
-    // Важно: убедись, что process.env.host настроена на публичный URL твоего сервиса в Railway.
-    const response = await axios.post(`${process.env.host}/ai/chat`, {
+    // Отправляем запрос к AI-сервису (убедиcь, что переменная окружения HOST задана)
+    const response = await axios.post(`${process.env.HOST}/ai/chat`, {
       question: message.body,
       phoneNumber: message.from,
     });
-
-    const aiResponse =
-      response.data?.response || "⚠️ Ошибка обработки запроса AI.";
+    const aiResponse = response.data?.response || "⚠️ Ошибка в AI-ответе";
     await client.sendMessage(message.from, aiResponse);
   } catch (error) {
-    console.error(`❌ Ошибка обработки сообщения: ${error.message}`);
+    console.error("❌ Ошибка обработки сообщения:", error.message);
     await client.sendMessage(
       message.from,
       "⚠️ Ошибка сервера. Попробуйте позже."
@@ -92,32 +69,34 @@ client.on("message", async (message) => {
   }
 });
 
+// Инициализация клиента
 client.initialize();
 
+// Маршрут для получения QR-кода в виде изображения
 app.get("/qr-image", async (req, res) => {
-  if (!lastQrCode) return res.status(404).send("QR-код ещё не сгенерирован");
+  if (!lastQrCode) {
+    return res.status(404).send("QR-код ещё не сгенерирован");
+  }
   try {
     const qrImage = await qrcode.toDataURL(lastQrCode);
-    const imgBuffer = Buffer.from(qrImage.split(",")[1], "base64");
-    res.writeHead(200, { "Content-Type": "image/png" });
-    res.end(imgBuffer);
+    res.send(`<img src="${qrImage}" alt="QR Code for WhatsApp login" />`);
   } catch (error) {
-    console.error("❌ Ошибка генерации QR-кода:", error);
+    console.error("Ошибка генерации QR-кода:", error.message);
     res.status(500).send("Ошибка генерации QR-кода");
   }
 });
 
+// Запуск сервера
 const start = async () => {
   try {
     await sequelize.authenticate();
-    console.log("✅ База данных подключена!");
+    console.log("✅ Подключение к базе данных установлено!");
 
-    // Здесь изменяем запуск сервера:
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`🚀 Сервер запущен и доступен на порту ${PORT}`);
+    app.listen(PORT, () => {
+      console.log(`🚀 Сервер работает на порту ${PORT}`);
     });
   } catch (error) {
-    console.error("❌ Ошибка при запуске сервера:", error.message);
+    console.error("❌ Ошибка запуска сервера:", error.message);
   }
 };
 
