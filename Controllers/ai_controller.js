@@ -191,12 +191,10 @@ class AIController {
       let finalAnswer = "Кешіріңіз, жауап бере алмаймын";
 
       if (searchResult && searchResult.length > 0) {
-        const answerFromDB = searchResult[0].metadata.answer;
+        const { answer, text } = searchResult[0].metadata;
 
-        console.log(answerFromDB);
-
-        // GPT-4 переформулирует ответ из базы
-        const refinedResponse = await axios.post(
+        // Передаем вопрос пользователя и оригинальный текст из базы в GPT-4
+        const relevanceCheckResponse = await axios.post(
           OPENAI_URL,
           {
             model: "gpt-4o-mini",
@@ -204,16 +202,19 @@ class AIController {
               {
                 role: "system",
                 content: `⚠️ Назар аударыңыз!  
-                            **Сіз жауаптарды интернеттен іздемеуіңіз керек!**  
-                            Сіздің міндетіңіз – **дерекқордағы дайын жауапты ғана жақсарту**.  
-                            - Егер дерекқорда жауап болса, оны тек табиғи түрде қайта жазыңыз.  
-                            - **Жаңа ақпарат ойлап таппаңыз**.  
-                            - **"Қосымша ақпарат алу үшін мамандарға хабарласыңыз" дегенді қажетсіз жазбаңыз**, тек егер бұл ақпарат шынымен керек болса.`,
+                            **Сізге екі сөйлем беріледі:  
+                            1. Пайдаланушының сұрағы  
+                            2. Дерекқордағы сақталған сұрақ**  
+                            - Егер олар мағынасы бойынша ұқсас болса, "YES" деп жауап беріңіз.  
+                            - Егер олар әртүрлі болса, "NO" деп жауап беріңіз.  
+                            - Басқа ешқандай сөз жазбаңыз!`,
               },
-              ...messages,
-              { role: "assistant", content: answerFromDB },
+              {
+                role: "user",
+                content: `Пайдаланушының сұрағы: ${question}\nДерекқордағы сұрақ: ${text}`,
+              },
             ],
-            temperature: 0.2,
+            temperature: 0,
           },
           {
             headers: {
@@ -223,8 +224,51 @@ class AIController {
           }
         );
 
-        console.log("respond", refinedResponse.data.usage.total_tokens);
-        finalAnswer = refinedResponse.data.choices[0].message.content.trim();
+        const isRelevant =
+          relevanceCheckResponse.data.choices[0].message.content.trim() ===
+          "YES";
+
+        if (isRelevant) {
+          console.log(
+            "✅ Вопрос пользователя совпадает с базой. Используем ответ:",
+            answer
+          );
+
+          // GPT-4 улучшает ответ
+          const refinedResponse = await axios.post(
+            OPENAI_URL,
+            {
+              model: "gpt-4o-mini",
+              messages: [
+                {
+                  role: "system",
+                  content: `⚠️ Назар аударыңыз!  
+                                **Сіз жауаптарды интернеттен іздемеуіңіз керек!**  
+                                Сіздің міндетіңіз – **дерекқордағы дайын жауапты ғана жақсарту**.  
+                                - Егер дерекқорда жауап болса, оны тек табиғи түрде қайта жазыңыз.  
+                                - **Жаңа ақпарат ойлап таппаңыз**.  
+                                - **"Қосымша ақпарат алу үшін мамандарға хабарласыңыз" дегенді қажетсіз жазбаңыз**, тек егер бұл ақпарат шынымен керек болса.`,
+                },
+                ...messages,
+                { role: "assistant", content: answer },
+              ],
+              temperature: 0.2,
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${OPENAI_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+
+          console.log("respond", refinedResponse.data.usage.total_tokens);
+          finalAnswer = refinedResponse.data.choices[0].message.content.trim();
+        } else {
+          console.log(
+            "❌ Вопрос пользователя не совпадает с базой. GPT-4 будет уточнять."
+          );
+        }
       } else {
         // Если ответа в базе нет, GPT-4 должен уточнить вопрос, а не отвечать из интернета
         const clarificationResponse = await axios.post(
