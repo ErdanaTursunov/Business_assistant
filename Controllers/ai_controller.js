@@ -286,11 +286,11 @@ class AIController {
         where: { phone_number: phoneNumber },
       });
 
-      if (userMessagesCount >= 10) {
+      if (userMessagesCount >= 4) {
         await Message.destroy({
           where: { phone_number: phoneNumber },
           order: [["created_at", "ASC"]],
-          limit: userMessagesCount - 9, // Удаляем всё, оставляя только 9 последних
+          limit: userMessagesCount - 3, // Удаляем всё, оставляя только 9 последних
         });
       }
 
