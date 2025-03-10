@@ -193,6 +193,8 @@ class AIController {
       if (searchResult && searchResult.length > 0) {
         const answerFromDB = searchResult[0].metadata.answer;
 
+        console.log(answerFromDB);
+
         // GPT-4 переформулирует ответ из базы
         const refinedResponse = await axios.post(
           OPENAI_URL,
