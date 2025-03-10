@@ -31,7 +31,7 @@ class PineconeLarge {
 
   async searchPinecone(req, res) {
     try {
-      const { query, topK = 5 } = req.body;
+      const { query, topK = 1 } = req.body;
 
       if (!query) {
         return res.status(400).json({ error: "Отсутствует запрос" });

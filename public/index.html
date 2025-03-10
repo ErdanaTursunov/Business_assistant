@@ -1,29 +1,77 @@
 <!DOCTYPE html>
 <html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WhatsApp QR-код</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
-        img { width: 300px; height: auto; margin-top: 20px; }
+      body {
+        font-family: Arial, sans-serif;
+        text-align: center;
+        padding: 20px;
+      }
+      img {
+        width: 300px;
+        height: auto;
+        margin-top: 20px;
+      }
+      button {
+        padding: 10px 20px;
+        font-size: 16px;
+        margin-top: 20px;
+        cursor: pointer;
+        display: block;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <h1>Отсканируйте QR-код для входа в WhatsApp</h1>
     <img id="qr-code" src="" alt="QR-код загружается..." />
+    <br />
+    <button id="refresh-btn" onclick="checkStatus()">🔄 Обновить</button>
+    <button id="logout-btn" onclick="logout()" style="display: none">
+      Выйти из WhatsApp
+    </button>
 
     <script>
-        async function loadQRCode() {
-            const response = await fetch("/qr-image");
-            if (response.ok) {
-                document.getElementById("qr-code").src = "/qr-image";
-            } else {
-                document.getElementById("qr-code").alt = "QR-код пока не сгенерирован";
+      async function checkStatus() {
+        try {
+          const response = await fetch("/status");
+          if (!response.ok) throw new Error("Ошибка сервера");
+
+          const data = await response.json();
+          const qrCode = document.getElementById("qr-code");
+          const logoutBtn = document.getElementById("logout-btn");
+
+          if (data.authenticated) {
+            qrCode.style.display = "none";
+            logoutBtn.style.display = "block";
+          } else {
+            qrCode.style.display = "block";
+            logoutBtn.style.display = "none";
+
+            const qrResponse = await fetch("/qr-image");
+            if (qrResponse.ok) {
+              const qrData = await qrResponse.text();
+              qrCode.src = qrData; // Загружаем QR-код
             }
+          }
+        } catch (error) {
+          console.error("Ошибка:", error);
         }
-        setInterval(loadQRCode, 5000); // Проверяем QR-код каждые 5 секунд
-        loadQRCode();
+      }
+
+      async function logout() {
+        const response = await fetch("/logout", { method: "POST" });
+        if (response.ok) {
+          alert("✅ Вы вышли из WhatsApp. Перезапустите сервер!");
+          location.reload();
+        } else {
+          alert("❌ Ошибка выхода");
+        }
+      }
+
+      checkStatus();
     </script>
-</body>
+  </body>
 </html>

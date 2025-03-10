@@ -3,14 +3,13 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const qrcode = require("qrcode");
+const fs = require("fs");
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const axios = require("axios");
 
-// Импорт роутеров и базы данных
 const Pinecone_router = require("./routes/Pinecone_router");
 const Weaviate_router = require("./routes/Weaviate_router");
 const sequelize = require("./db");
-const Message = require("./models/Message");
 const ai_router = require("./routes/Ai_router");
 
 const PORT = process.env.PORT || 4000;
@@ -20,18 +19,30 @@ app.use(cors({ origin: "*" }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
+// Подключаем маршруты
 app.use("/weaviate", Weaviate_router);
 app.use("/pinecone", Pinecone_router);
 app.use("/ai", ai_router);
 
-// Инициализация клиента WhatsApp с LocalAuth
+// Удаляем старую сессию при старте сервера
+const sessionPath = path.join(__dirname, "session");
+if (fs.existsSync(sessionPath)) {
+  fs.rmSync(sessionPath, { recursive: true, force: true });
+  console.log("🗑️ Удалена старая сессия WhatsApp");
+}
+
+// Создаём клиента WhatsApp
 const client = new Client({
-  authStrategy: new LocalAuth(),
+  authStrategy: new LocalAuth({ dataPath: sessionPath }),
+  puppeteer: {
+    executablePath:
+      process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/google-chrome-stable",
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  },
 });
 
 let lastQrCode = null;
 
-// При получении QR-кода сохраняем его и выводим в консоль
 client.on("qr", async (qr) => {
   lastQrCode = qr;
   console.log("📱 Отсканируйте QR-код для входа в WhatsApp");
@@ -41,20 +52,16 @@ client.on("qr", async (qr) => {
   });
 });
 
-// Когда клиент готов, выводим сообщение
 client.on("ready", () => {
   console.log("✅ WhatsApp-бот запущен и готов к работе!");
 });
 
-// Обработка входящих сообщений
 client.on("message", async (message) => {
-  // Игнорируем сообщения из групп и сообщения, отправленные самим собой
   if (message.isGroupMsg || message.fromMe || message.author) return;
   console.log(`📩 Новое сообщение от ${message.from}: ${message.body}`);
 
   try {
-    // Отправляем запрос к AI-сервису (убедиcь, что переменная окружения HOST задана)
-    const response = await axios.post(`${process.env.HOST}/ai/chat`, {
+    const response = await axios.post(`${process.env.host}/ai/chat`, {
       question: message.body,
       phoneNumber: message.from,
     });
@@ -69,20 +76,39 @@ client.on("message", async (message) => {
   }
 });
 
-// Инициализация клиента
 client.initialize();
 
-// Маршрут для получения QR-кода в виде изображения
+// Получение QR-кода в виде изображения
 app.get("/qr-image", async (req, res) => {
   if (!lastQrCode) {
     return res.status(404).send("QR-код ещё не сгенерирован");
   }
   try {
     const qrImage = await qrcode.toDataURL(lastQrCode);
-    res.send(`<img src="${qrImage}" alt="QR Code for WhatsApp login" />`);
+    res.send(qrImage);
   } catch (error) {
     console.error("Ошибка генерации QR-кода:", error.message);
     res.status(500).send("Ошибка генерации QR-кода");
+  }
+});
+
+// Проверка статуса авторизации в WhatsApp
+app.get("/status", async (req, res) => {
+  const isAuthenticated = client.info?.wid ? true : false;
+  console.log("Состояние клиента:", client.info);
+  res.json({ authenticated: isAuthenticated });
+});
+
+// Выход из WhatsApp и очистка сессии
+app.post("/logout", async (req, res) => {
+  try {
+    await client.logout(); // Выход из WhatsApp
+    fs.rmSync(sessionPath, { recursive: true, force: true }); // Удаляем файлы сессии
+    console.log("🔴 WhatsApp-сессия удалена!");
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("❌ Ошибка при выходе:", error.message);
+    res.status(500).json({ error: "Ошибка выхода" });
   }
 });
 
@@ -91,7 +117,6 @@ const start = async () => {
   try {
     await sequelize.authenticate();
     console.log("✅ Подключение к базе данных установлено!");
-
     app.listen(PORT, () => {
       console.log(`🚀 Сервер работает на порту ${PORT}`);
     });

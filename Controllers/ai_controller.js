@@ -15,41 +15,48 @@ class AIController {
         return res.status(400).json({ error: "Сұрақ міндетті түрде қажет" });
       }
 
-      // 1️⃣ Загружаем историю сообщений пользователя
-      const history = await Message.findAll({
-        where: { phone_number: phoneNumber },
-        order: [["created_at", "ASC"]],
-        limit: 2,
-      });
+      // 1️⃣ Проверяем, содержит ли вопрос только вежливость или имеет смысловую часть
+      const politePhrases = [
+        "сәлем",
+        "салем",
+        "салеметсіз бе",
+        "сәлеметсіз бе",
+        "қайырлы таң",
+        "қайырлы күн",
+        "рахмет",
+        "қалайсыз",
+        "қалыңыз қалай",
+        "қалың қалай",
+        "сізге рахмет",
+        "рахмет көп көп",
+        "сау болыңыз",
+        "қош болыңыз",
+      ];
 
-      const messages = history.flatMap((msg) => [
-        { role: "user", content: msg.message },
-        { role: "assistant", content: msg.ai_response },
-      ]);
+      const lowerQuestion = question.toLowerCase().trim();
+      const words = lowerQuestion.split(/\s+/);
+      const containsPolitePhrase = politePhrases.some((phrase) =>
+        words.includes(phrase)
+      );
+      const hasMeaningfulContent =
+        words.length > 2 || (words.length > 1 && !containsPolitePhrase);
 
-      messages.push({ role: "user", content: question });
+      if (containsPolitePhrase && !hasMeaningfulContent) {
+        return res.json({ needsSearch: false });
+      }
 
-      // 2️⃣ Запрос AI для анализа контекста
+      // 2️⃣ Формируем запрос AI для анализа необходимости поиска
       const prompt = `
-      Сен пайдаланушының сұрағын және оның алдыңғы сұхбатын талдайсың.
-      Міндетің – осы сұраққа жауап беру үшін векторлық дерекқордан ақпарат алу қажет пе, жоқ па, соны анықтау.
-      Тек "иә" немесе "жоқ" деп жауап бер.
-      
-      📌 "иә" деп жауап бер, егер сұрақ немесе сөйлемнің мағынасы ақпарат алуды білдірсе.
-      
-      ❌ "жоқ" деп жауап бер:
-      - Егер пайдаланушы тек амандасса, қоштасса немесе сыпайылық білдірсе.
-      - Егер сұрақ диалогты жалғастыруға арналған, бірақ жаңа ақпарат сұрамаса.
-      - Егер сұрақ нақты операторға бағытталған.
-      
-      ✅ Барлық басқа жағдайларда "иә" деп жауап бер, **тіпті сұрақ толық болмаса да**.
-      
-      🔹 Пайдаланушы сұрағы: "${question}"
-      🔹 Соңғы хабарламалар:
-      ${messages.map((m) => `- ${m.role}: ${m.content}`).join("\n")}
-      `.trim();
+  Сен пайдаланушының сұрағын талдайсың.
+  Міндетің – осы сұраққа жауап беру үшін векторлық дерекқордан ақпарат алу қажет пе, жоқ па, соны анықтау.
+  Тек "иә" немесе "жоқ" деп жауап бер.
+  
+  📌 "иә" деп жауап бер, егер сұрақ ақпарат алуды білдірсе.
+  ❌ "жоқ" деп жауап бер, егер сұрақ – тек амандасу, қоштасу немесе рахмет айту ғана.
+  
+  🔹 Пайдаланушы сұрағы: "${question}"
+  `.trim();
 
-      // 3️⃣ Отправляем запрос AI
       const response = await axios.post(
         OPENAI_URL,
         {
@@ -65,23 +72,16 @@ class AIController {
         }
       );
 
-      // Проверяем, что OpenAI вернул корректный ответ
       if (!response.data.choices || response.data.choices.length === 0) {
         throw new Error("OpenAI не вернул корректный ответ");
       }
 
-      console.log(
-        "Токены, использованные в запросе analyze:",
-        response.data.usage?.total_tokens || "Нет данных"
-      );
-
       const decision =
         response.data.choices[0]?.message?.content?.toLowerCase() || "";
       console.log({ decision });
-
       const needsSearch = decision.includes("иә");
 
-      res.json({needsSearch});
+      res.json({ needsSearch });
     } catch (error) {
       console.error("🚨 AI Анализатор қатесі:", error.message || error);
       res.status(500).json({ error: "Сервер қатесі" });
@@ -100,7 +100,7 @@ class AIController {
       const history = await Message.findAll({
         where: { phone_number: phoneNumber },
         order: [["created_at", "ASC"]],
-        limit: 2,
+        limit: 3,
       });
 
       // 2️⃣ Тарихты OpenAI үшін форматтау
@@ -112,6 +112,8 @@ class AIController {
         .flat();
 
       messages.push({ role: "user", content: query });
+
+      console.log({ search: messages });
 
       // 3️⃣ GPT-4 арқылы сұрақты нақты әрі дұрыс өңдеу
       const clarificationResponse = await axios.post(
@@ -186,7 +188,7 @@ class AIController {
 
       messages.push({ role: "user", content: question });
 
-      let finalAnswer = "Кешіріңіз, жауап бере алмаймны";
+      let finalAnswer = "Кешіріңіз, жауап бере алмаймын";
 
       if (searchResult && searchResult.length > 0) {
         const answerFromDB = searchResult[0].metadata.answer;
@@ -232,14 +234,13 @@ class AIController {
                 role: "system",
                 content: `❌ **Интернеттен ақпарат іздемеңіз!**  
                             Егер сұраққа нақты жауап болмаса, **пайдаланушыдан қосымша ақпарат сұраңыз**.  
-                            **Жаңа ақпарат ойлап таппаңыз** 
-                            
-                             **Егер сен білмейтін сұрақтар болса әлде консультацияға жазылғысы келсе немесе қызметті алғысы келсе - шаблонды ғана жауапқа жібер.**
-                             **Шаблон: Толық ақпарат және қызметке жазылу үшін менің менеджеріме жазыңыз:
-                             Менеджердің аты Ақерке 
-                             WhatsApp: +7 747 724 0799
-                             Сізге көмектесуге қуаныштымыз!**.
-                            `,
+                            **Жаңа ақпарат ойлап таппаңыз**  
+                             
+                             **Егер сен білмейтін сұрақтар болса әлде консультацияға жазылғысы келсе немесе қызметті алғысы келсе - шаблонды ғана жауапқа жібер.**  
+                             **Шаблон: Толық ақпарат және қызметке жазылу үшін менің менеджеріме жазыңыз:  
+                             Менеджердің аты Ақерке  
+                             WhatsApp: +7 747 724 0799  
+                             Сізге көмектесуге қуаныштымыз!**.`,
               },
               ...messages,
             ],
@@ -258,21 +259,24 @@ class AIController {
           clarificationResponse.data.choices[0].message.content.trim();
       }
 
-      // 🔍 Проверяем, требует ли ответ консультации
-      const consultationPhrases = [
-        "қосымша анықтаманы мамандардан алуға болады",
-        "кеңес алу үшін",
-        "толық ақпарат алу үшін байланысыңыз",
-        "оқу курсына жазылыңыз",
-        "сізге мамандардан көмек қажет болуы мүмкін",
+      // 🔍 Проверяем, связан ли ответ с услугами
+      const serviceKeywords = [
+        "құжат",
+        "жәрдемақы",
+        "ипотека",
+        "грант",
+        "бизнес-жоспар",
+        "субсидия",
+        "страховка",
+        "зейнетақы",
       ];
-
-      const requiresConsultation = consultationPhrases.some((phrase) =>
-        finalAnswer.toLowerCase().includes(phrase)
+      const mentionsService = serviceKeywords.some((keyword) =>
+        finalAnswer.toLowerCase().includes(keyword)
       );
 
-      if (requiresConsultation) {
-        finalAnswer = `📌 Егер сізге курс немесе консультация қажет болса, мына номерге жазуыңызды өтінеміз: +7 (XXX) XXX-XX-XX.`;
+      if (mentionsService) {
+        finalAnswer +=
+          "\n\n📌 Толық ақпарат және қызметке жазылу үшін менің менеджеріме жазыңыз: Ақерке, WhatsApp: +7 747 724 0799.";
       }
 
       // Если сообщений больше 10, удаляем старые
