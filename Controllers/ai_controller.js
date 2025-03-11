@@ -191,19 +191,16 @@ class AIController {
 
       let finalAnswer = "Кешіріңіз, жауап бере алмаймын";
 
-      // Проверяем наличие результата
       if (Array.isArray(searchResult) && searchResult.length > 0) {
         const { score, metadata } = searchResult[0];
         console.log(`🔍 Score: ${score}`);
 
-        if (score >= 0.7) {
-          // Если score выше 0.7, берем ответ сразу
+        if (score >= 0.55) {
           console.log("🎯 Высокий score, используем ответ без OpenAI");
           finalAnswer = metadata.answer;
         } else {
-          console.log(`🔎 Проверяем релевантность вопроса...`);
+          console.log("🔎 Проверяем релевантность вопроса...");
 
-          // Проверяем схожесть с GPT
           const relevanceCheckResponse = await axios.post(
             OPENAI_URL,
             {
@@ -211,9 +208,7 @@ class AIController {
               messages: [
                 {
                   role: "system",
-                  content: `Тек "YES" немесе "NO" деп жауап бер. 
-                  Егер пайдаланушы сұрағы мен база сұрағы бір тақырыпта болса, "YES" деп жауап бер. 
-                  Егер олар әртүрлі тақырыпта болса, "NO" деп жауап бер.`,
+                  content: `Тек "YES" немесе "NO" деп жауап бер. Егер пайдаланушы сұрағы мен база сұрағы бір тақырыпта болса, "YES" деп жауап бер. Егер олар әртүрлі тақырыпта болса, "NO" деп жауап бер.`,
                 },
                 {
                   role: "user",
@@ -234,9 +229,7 @@ class AIController {
             relevanceCheckResponse?.data?.choices?.[0]?.message?.content?.trim();
           console.log(`🧠 Ответ от OpenAI: "${openAiResponse}"`);
 
-          const isRelevant = openAiResponse?.toUpperCase() === "YES";
-
-          if (isRelevant) {
+          if (openAiResponse?.toUpperCase() === "YES") {
             console.log(
               "✅ Вопрос релевантен. Используем ответ:",
               metadata.answer
@@ -246,7 +239,6 @@ class AIController {
         }
       }
 
-      // Если вопрос — просто вежливость, даем мягкий ответ
       const politeResponses = {
         рахмет: "Сізге де рахмет! 😊",
         спасибо: "Рақмет! Көмектесе алсам, қуаныштымын! 🌟",
@@ -259,22 +251,21 @@ class AIController {
         finalAnswer = politeResponses[normalizedQuestion];
       }
 
-      // Добавляем информацию о менеджере, если её нет в ответе
-      const managerInfo = `
-\n\nБұл автоматты ИИ асистент жауабы. Егер сізге Айдана Асқарқызы көмегі қажет болса немесе консультация әзірге менеджерге жазыңыз:
-Менеджер есімі Ақерке
-WhatsApp: +7 747 724 07 99
+      if (Array.isArray(searchResult) && searchResult.length > 0) {
+        const { score } = searchResult[0];
 
-Егер ақылы консультация алғыңыз келсе құны 5000, төлем жасап тікелей өзіме звандай берсеңіз болады!`;
-
-      if (
-        !finalAnswer.includes("Ақерке") &&
-        !finalAnswer.includes("WhatsApp")
-      ) {
-        finalAnswer += managerInfo;
+        if (score >= 0.55) {
+          finalAnswer += `\n\nМожете обратиться по этим вопросам:\nМенеджер есімі Ақерке\nWhatsApp: +7 747 724 07 99`;
+        } else {
+          finalAnswer += `
+      \n\nБұл автоматты ИИ асистент жауабы. Егер сізге Айдана Асқарқызы көмегі қажет болса немесе консультация әзірге менеджерге жазыңыз:
+      Менеджер есімі Ақерке
+      WhatsApp: +7 747 724 07 99
+      
+      Егер ақылы консультация алғыңыз келсе құны 5000, төлем жасап тікелей өзіме звандай берсеңіз болады!`;
+        }
       }
 
-      // Если вообще нет ответа, даем стандартный текст
       if (!finalAnswer || finalAnswer === "Кешіріңіз, жауап бере алмаймын") {
         finalAnswer =
           "Бұл автоматты ИИ көмекшісі. Сізге қосымша ақпарат қажет пе?";
@@ -284,20 +275,17 @@ WhatsApp: +7 747 724 07 99
       const userMessagesCount = await Message.count({
         where: { phone_number: phoneNumber },
       });
-
       if (userMessagesCount >= 4) {
         const oldMessages = await Message.findAll({
           where: { phone_number: phoneNumber },
           order: [["created_at", "ASC"]],
           limit: userMessagesCount - 3,
         });
-
         await Message.destroy({
           where: { id: oldMessages.map((msg) => msg.id) },
         });
       }
 
-      // Сохраняем новый диалог
       await Message.create({
         phone_number: phoneNumber,
         message: question,
