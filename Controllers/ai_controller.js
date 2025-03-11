@@ -330,36 +330,25 @@ class AIController {
       }
 
       const apiHost = process.env.host; // Убедись, что `HOST` задан в .env
-
       console.log(apiHost);
 
-      // 1️⃣ Анализируем вопрос
-      const analyzeResponse = await axios.post(`${apiHost}/ai/analyze`, {
-        question,
+      // 1️⃣ Ищем в векторной базе
+      const searchResponse = await axios.post(`${apiHost}/ai/search`, {
+        query: question,
         phoneNumber,
       });
-      console.log("🔍 Analyze Result:", analyzeResponse.data);
 
-      let searchResult = [];
-      if (analyzeResponse.data.needsSearch) {
-        // 2️⃣ Если нужен поиск, ищем в векторной базе
-        const searchResponse = await axios.post(`${apiHost}/ai/search`, {
-          query: question,
-          phoneNumber,
-        });
+      console.log("🔎 Search Result:", searchResponse.data);
+      const searchResult = searchResponse.data.searchResult || [];
 
-        console.log("🔎 Search Result:", searchResponse.data);
-        searchResult = searchResponse.data.searchResult;
-      }
-
-      // 3️⃣ Получаем финальный ответ
+      // 2️⃣ Получаем финальный ответ
       const respondResponse = await axios.post(`${apiHost}/ai/respond`, {
         question,
         searchResult,
         phoneNumber,
       });
-      console.log("💬 Final Response:", respondResponse.data);
 
+      console.log("💬 Final Response:", respondResponse.data);
       res.json({ response: respondResponse.data.response });
     } catch (error) {
       console.error("🚨 Process Error:", error.message);
