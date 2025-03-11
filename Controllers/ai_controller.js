@@ -92,30 +92,12 @@ class AIController {
 
   async search(req, res) {
     try {
-      const { query, phoneNumber } = req.body;
-      if (!query || !phoneNumber)
-        return res.status(400).json({ error: "Сұрақ міндетті" });
+      const { query } = req.body;
+      if (!query) return res.status(400).json({ error: "Сұрақ міндетті" });
 
-      // 1️⃣ Пайдаланушының тарихын алу
-      const history = await Message.findAll({
-        where: { phone_number: phoneNumber },
-        order: [["created_at", "ASC"]],
-        limit: 3,
-      });
+      console.log(`🔎 Іздеу сұранысы: ${query}`);
 
-      // 2️⃣ Тарихты OpenAI үшін форматтау
-      const messages = history
-        .map((msg) => [
-          { role: "user", content: msg.message },
-          { role: "assistant", content: msg.ai_response },
-        ])
-        .flat();
-
-      messages.push({ role: "user", content: query });
-
-      console.log({ search: messages });
-
-      // 3️⃣ GPT-4 арқылы сұрақты нақты әрі дұрыс өңдеу
+      // 1️⃣ GPT-4 арқылы сұрақты нақтылау
       const clarificationResponse = await axios.post(
         OPENAI_URL,
         {
@@ -126,13 +108,14 @@ class AIController {
               content: `Сен пайдаланушы сұрағын нақты әрі түсінікті қылып қайта жазатын көмекшісің.  
   Сұрақтың негізгі мәнін сақта, бірақ оны **қысқа әрі анық** ет.  
   **Сұраулы сөйлемдер жасама.** Пайдаланушының атынан нақты сұрақты қайта жаз.  
-  Жауап ретінде тек түзетілген сұрақты қайтар. Мысалы : "Сәлеметсіз бе, маған декларация формасы керек еді 270"	=>"270 декларация формасы"
-  "ЖК тіркеу үшін қандай құжаттар керек?" =>	"ЖК ашу үшін қажет құжаттар"
-  "Мүлікті аресттен қалай алып тастауға болады?" =>	"Мүліктен арестті алып тастау"`,
+  Жауап ретінде тек түзетілген сұрақты қайтар. Мысалы :  
+  "Сәлеметсіз бе, маған декларация формасы керек еді 270" => "270 декларация формасы"  
+  "ЖК тіркеу үшін қандай құжаттар керек?" => "ЖК ашу үшін қажет құжаттар"  
+  "Мүлікті аресттен қалай алып тастауға болады?" => "Мүліктен арестті алып тастау"`,
             },
-            ...messages, // Тарихты есепке аламыз
+            { role: "user", content: query },
           ],
-          temperature: 0.1, // Жауапты тұрақты ету үшін
+          temperature: 0.1,
         },
         {
           headers: {
@@ -143,24 +126,24 @@ class AIController {
       );
 
       console.log(
-        "Токены, использованные в запросе search :",
+        "🧠 Токены, использованные в запросе search:",
         clarificationResponse.data.usage.total_tokens
       );
+
       const clarifiedQuery =
         clarificationResponse.data.choices[0].message.content.trim();
-      console.log(`Нақтыланған сұрақ: ${clarifiedQuery}`);
+      console.log(`✅ Нақты сұрақ: ${clarifiedQuery}`);
 
       const apiHost = process.env.host;
-      // 4️⃣ Векторлық базаға жіберу
-      const pineconeResponse = await axios.post(`${apiHost}/pinecone/search/`, {
-        query: clarifiedQuery, // Түзетілген сұрақты жібереміз
+
+      // 2️⃣ Векторлық базаға жіберу
+      const searchResult = await axios.post(`${apiHost}/pinecone/search/`, {
+        query: clarifiedQuery,
       });
 
-      const searchResult = pineconeResponse.data;
-
-      res.json({ searchResult });
+      res.json({ searchResult: searchResult.data });
     } catch (error) {
-      console.error("Іздеу қатесі:", error);
+      console.error("❌ Іздеу қатесі:", error);
       res.status(500).json({ error: "Сервер қатесі" });
     }
   }
@@ -169,25 +152,11 @@ class AIController {
 
   async respond(req, res) {
     try {
-      const { question, searchResult, phoneNumber } = req.body;
+      const { question, searchResult } = req.body;
       if (!question)
         return res.status(400).json({ error: "Вопрос обязателен" });
 
-      console.log(`📩 Новый вопрос: "${question}" от ${phoneNumber}`);
-
-      // Загружаем последние 2 сообщения
-      const history = await Message.findAll({
-        where: { phone_number: phoneNumber },
-        order: [["created_at", "ASC"]],
-        limit: 2,
-      });
-
-      // Формируем историю сообщений
-      const messages = history.flatMap((msg) => [
-        { role: "user", content: msg.message },
-        { role: "assistant", content: msg.ai_response },
-      ]);
-      messages.push({ role: "user", content: question });
+      console.log(`📩 Новый вопрос: "${question}"`);
 
       let finalAnswer = "Кешіріңіз, жауап бере алмаймын";
 
@@ -257,12 +226,7 @@ class AIController {
         if (score >= 0.55) {
           finalAnswer += `\n\nСіз осы мәселелер бойынша менеджерге жүгіне аласыз:\nМенеджер есімі Ақерке\nWhatsApp: +7 747 724 07 99`;
         } else {
-          finalAnswer += `
-      \n\nБұл автоматты ИИ асистент жауабы. Егер сізге Айдана Асқарқызы көмегі қажет болса немесе консультация әзірге менеджерге жазыңыз:
-      Менеджер есімі Ақерке
-      WhatsApp: +7 747 724 07 99
-      
-      Егер ақылы консультация алғыңыз келсе құны 5000, төлем жасап тікелей өзіме звандай берсеңіз болады!`;
+          finalAnswer += `\n\nБұл автоматты ИИ асистент жауабы. Егер сізге менеджер көмегі қажет болса, жазыңыз:\nМенеджер есімі Ақерке\nWhatsApp: +7 747 724 07 99\n\nЕгер ақылы консультация алғыңыз келсе, құны 5000, төлем жасап тікелей өзіме хабарласыңыз!`;
         }
       }
 
@@ -270,27 +234,6 @@ class AIController {
         finalAnswer =
           "Бұл автоматты ИИ көмекшісі. Сізге қосымша ақпарат қажет пе?";
       }
-
-      // Удаляем старые сообщения, если их больше 3
-      const userMessagesCount = await Message.count({
-        where: { phone_number: phoneNumber },
-      });
-      if (userMessagesCount >= 4) {
-        const oldMessages = await Message.findAll({
-          where: { phone_number: phoneNumber },
-          order: [["created_at", "ASC"]],
-          limit: userMessagesCount - 3,
-        });
-        await Message.destroy({
-          where: { id: oldMessages.map((msg) => msg.id) },
-        });
-      }
-
-      await Message.create({
-        phone_number: phoneNumber,
-        message: question,
-        ai_response: finalAnswer,
-      });
 
       console.log("📤 Отправлен ответ:", finalAnswer);
       return res.json({ response: finalAnswer });
