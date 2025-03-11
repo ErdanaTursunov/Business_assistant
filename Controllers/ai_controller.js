@@ -173,75 +173,44 @@ class AIController {
       if (!question)
         return res.status(400).json({ error: "Вопрос обязателен" });
 
+      console.log(`📩 Новый вопрос: "${question}" от ${phoneNumber}`);
+
+      // Загружаем последние 2 сообщения
       const history = await Message.findAll({
         where: { phone_number: phoneNumber },
         order: [["created_at", "ASC"]],
         limit: 2,
       });
 
-      const messages = history
-        .map((msg) => [
-          { role: "user", content: msg.message },
-          { role: "assistant", content: msg.ai_response },
-        ])
-        .flat();
-
+      // Формируем историю сообщений
+      const messages = history.flatMap((msg) => [
+        { role: "user", content: msg.message },
+        { role: "assistant", content: msg.ai_response },
+      ]);
       messages.push({ role: "user", content: question });
 
-      // Шаблонный ответ, который будет отправляться в случае отсутствия релевантного ответа
+      // Шаблонный ответ, если ничего не найдено
       const templateAnswer = `Бұл автоматты ИИ асистент жауабы. Егер сізге Айдана Асқарқызы көмегі қажет болса немесе консультация қажет болса, менеджерге жазыңыз:
-  Менеджер: Ақерке
-  WhatsApp: +7 747 724 0799
-  (Ақылы консультация – 5000, төлем жасап, тікелей байланысыңыз.)`;
+      Менеджер: Ақерке
+      WhatsApp: +7 747 724 0799
+      (Ақылы консультация – 5000, төлем жасап, тікелей байланысыңыз.)`;
 
       let finalAnswer = "Кешіріңіз, жауап бере алмаймын";
 
-      if (searchResult && searchResult.length > 0) {
-        const { answer, text } = searchResult[0].metadata;
+      // Проверяем наличие результата
+      if (Array.isArray(searchResult) && searchResult.length > 0) {
+        const { score, metadata } = searchResult[0];
+        console.log(`🔍 Score: ${score}`);
 
-        // Проверяем релевантность вопроса из базы
-        const relevanceCheckResponse = await axios.post(
-          OPENAI_URL,
-          {
-            model: "gpt-4o-mini",
-            messages: [
-              {
-                role: "system",
-                content: `⚠️ Назар аударыңыз!  
-  Сізге екі сөйлем беріледі:  
-  1. Пайдаланушының сұрағы  
-  2. Дерекқордағы сұрақ  
-  - Егер олар мағынасы бойынша ұқсас болса, "YES" деп жауап беріңіз.  
-  - Егер олар әртүрлі болса, "NO" деп жауап беріңіз.  
-  Басқа ешқандай сөз жазбаңыз!`,
-              },
-              {
-                role: "user",
-                content: `Пайдаланушының сұрағы: ${question}\nДерекқордағы сұрақ: ${text}`,
-              },
-            ],
-            temperature: 0,
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${OPENAI_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        if (score >= 0.7) {
+          // Если score выше 0.7, берем ответ сразу без OpenAI
+          console.log("🎯 Высокий score, используем ответ без OpenAI");
+          finalAnswer = metadata.answer;
+        } else {
+          console.log(`🔎 Проверяем релевантность вопроса...`);
 
-        const isRelevant =
-          relevanceCheckResponse.data.choices[0].message.content.trim() ===
-          "YES";
-
-        if (isRelevant) {
-          console.log(
-            "✅ Вопрос пользователя совпадает с базой. Используем ответ:",
-            answer
-          );
-
-          // Улучшаем ответ, используя GPT-4
-          const refinedResponse = await axios.post(
+          // Проверяем схожесть с помощью GPT
+          const relevanceCheckResponse = await axios.post(
             OPENAI_URL,
             {
               model: "gpt-4o-mini",
@@ -249,15 +218,19 @@ class AIController {
                 {
                   role: "system",
                   content: `⚠️ Назар аударыңыз!  
-                    **Сізге берілген жауапты ғана қайта жазыңыз.**  
-                    - **Жаңа ақпарат қоспаңыз!**  
-                    - Егер жауап толық болса, оны өзгертпей қайтарыңыз.  
-                    - Тек табиғи түрде, қысқа әрі анық жеткізіңіз.`,
+  Сізге екі сөйлем беріледі:  
+  1. Пайдаланушының сұрағы  
+  2. Дерекқордағы сұрақ  
+  - Егер олар бір тақырыпқа байланысты болса (тіпті сұрау форматы әртүрлі болса да), "YES" деп жауап беріңіз.  
+  - Егер олар мүлдем басқа нәрсе туралы болса, "NO" деп жауап беріңіз.  
+  Тек "YES" немесе "NO" деп жауап беріңіз, басқа ештеңе жазбаңыз!`,
                 },
-                { role: "assistant", content: answer },
+                {
+                  role: "user",
+                  content: `Пайдаланушының сұрағы: ${question}\nДерекқордағы сұрақ: ${metadata.text}`,
+                },
               ],
-              temperature: 0.1, // Минимальное творчество
-              max_tokens: 150, // Ограничение на длину ответа
+              temperature: 0,
             },
             {
               headers: {
@@ -267,20 +240,35 @@ class AIController {
             }
           );
 
-          console.log("respond", refinedResponse.data.usage.total_tokens);
-          finalAnswer = refinedResponse.data.choices[0].message.content.trim();
-        } else {
-          console.log(
-            "❌ Вопрос пользователя не совпадает с данными базы. Отправляем шаблон."
-          );
-          finalAnswer = templateAnswer;
+          const openAiResponse =
+            relevanceCheckResponse?.data?.choices?.[0]?.message?.content?.trim();
+
+          console.log(`🧠 Ответ от OpenAI: "${openAiResponse}"`);
+
+          const isRelevant = openAiResponse?.toUpperCase() === "YES";
+
+          if (typeof isRelevant === "undefined") {
+            console.log(
+              "⚠️ OpenAI не дал ответа. Считаем релевантным по умолчанию."
+            );
+            finalAnswer = metadata.answer;
+          } else if (isRelevant) {
+            console.log(
+              "✅ Вопрос релевантен. Используем ответ:",
+              metadata.answer
+            );
+            finalAnswer = metadata.answer;
+          } else {
+            console.log("❌ Вопрос не совпадает. Отправляем шаблон.");
+            finalAnswer = templateAnswer;
+          }
         }
       } else {
-        console.log("❌ Нет ответа в базе. Отправляем шаблон.");
+        console.log("❌ Ничего не найдено в базе. Отправляем шаблон.");
         finalAnswer = templateAnswer;
       }
 
-      // Если в ответе встречаются ключевые слова, добавляем информацию о менеджере
+      // Если в ответе есть ключевые слова, добавляем инфо о менеджере
       const serviceKeywords = [
         "құжат",
         "жәрдемақы",
@@ -291,39 +279,42 @@ class AIController {
         "страховка",
         "зейнетақы",
       ];
-      const mentionsService = serviceKeywords.some((keyword) =>
-        finalAnswer.toLowerCase().includes(keyword)
-      );
-
-      if (mentionsService) {
+      if (
+        serviceKeywords.some((word) => finalAnswer.toLowerCase().includes(word))
+      ) {
         finalAnswer +=
           "\n\n📌 Толық ақпарат және қызметке жазылу үшін менің менеджеріме жазыңыз: Ақерке, WhatsApp: +7 747 724 0799.";
       }
 
-      // Если сообщений больше заданного числа, удаляем старые
+      // Удаляем старые сообщения, если их больше 3
       const userMessagesCount = await Message.count({
         where: { phone_number: phoneNumber },
       });
 
       if (userMessagesCount >= 4) {
-        await Message.destroy({
+        const oldMessages = await Message.findAll({
           where: { phone_number: phoneNumber },
           order: [["created_at", "ASC"]],
           limit: userMessagesCount - 3,
         });
+
+        await Message.destroy({
+          where: { id: oldMessages.map((msg) => msg.id) },
+        });
       }
 
-      // Сохраняем в базу новый вопрос и ответ
+      // Сохраняем новый диалог
       await Message.create({
         phone_number: phoneNumber,
         message: question,
         ai_response: finalAnswer,
       });
 
-      res.json({ response: finalAnswer });
+      console.log("📤 Отправлен ответ:", finalAnswer);
+      return res.json({ response: finalAnswer });
     } catch (error) {
       console.error("🚨 Ошибка:", error);
-      res.status(500).json({ error: "Ошибка сервера" });
+      return res.status(500).json({ error: "Ошибка сервера" });
     }
   }
 
