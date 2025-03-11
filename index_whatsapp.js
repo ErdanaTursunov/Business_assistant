@@ -102,10 +102,24 @@ app.get("/status", async (req, res) => {
 // Выход из WhatsApp и очистка сессии
 app.post("/logout", async (req, res) => {
   try {
-    await client.logout(); // Выход из WhatsApp
-    fs.rmSync(sessionPath, { recursive: true, force: true }); // Удаляем файлы сессии
-    console.log("🔴 WhatsApp-сессия удалена!");
+    if (client) {
+      await client.logout();
+      await client.destroy();
+      console.log("🔴 WhatsApp-сессия уничтожена!");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    if (fs.existsSync(sessionPath)) {
+      fs.rmSync(sessionPath, { recursive: true, force: true });
+      console.log("🗑️ Удалена папка сессии WhatsApp");
+    }
+
+    console.log("🔄 Перезапуск сервера...");
     res.sendStatus(200);
+
+    // Завершаем процесс, чтобы сервер перезапустился (PM2 или nodemon поднимут его снова)
+    process.exit(0);
   } catch (error) {
     console.error("❌ Ошибка при выходе:", error.message);
     res.status(500).json({ error: "Ошибка выхода" });
