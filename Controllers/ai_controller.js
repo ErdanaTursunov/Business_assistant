@@ -189,12 +189,6 @@ class AIController {
       ]);
       messages.push({ role: "user", content: question });
 
-      // Шаблонный ответ, если ничего не найдено
-      const templateAnswer = `Бұл автоматты ИИ асистент жауабы. Егер сізге Айдана Асқарқызы көмегі қажет болса немесе консультация қажет болса, менеджерге жазыңыз:
-      Менеджер: Ақерке
-      WhatsApp: +7 747 724 0799
-      (Ақылы консультация – 5000, төлем жасап, тікелей байланысыңыз.)`;
-
       let finalAnswer = "Кешіріңіз, жауап бере алмаймын";
 
       // Проверяем наличие результата
@@ -203,13 +197,13 @@ class AIController {
         console.log(`🔍 Score: ${score}`);
 
         if (score >= 0.7) {
-          // Если score выше 0.7, берем ответ сразу без OpenAI
+          // Если score выше 0.7, берем ответ сразу
           console.log("🎯 Высокий score, используем ответ без OpenAI");
           finalAnswer = metadata.answer;
         } else {
           console.log(`🔎 Проверяем релевантность вопроса...`);
 
-          // Проверяем схожесть с помощью GPT
+          // Проверяем схожесть с GPT
           const relevanceCheckResponse = await axios.post(
             OPENAI_URL,
             {
@@ -217,13 +211,9 @@ class AIController {
               messages: [
                 {
                   role: "system",
-                  content: `⚠️ Назар аударыңыз!  
-  Сізге екі сөйлем беріледі:  
-  1. Пайдаланушының сұрағы  
-  2. Дерекқордағы сұрақ  
-  - Егер олар бір тақырыпқа байланысты болса (тіпті сұрау форматы әртүрлі болса да), "YES" деп жауап беріңіз.  
-  - Егер олар мүлдем басқа нәрсе туралы болса, "NO" деп жауап беріңіз.  
-  Тек "YES" немесе "NO" деп жауап беріңіз, басқа ештеңе жазбаңыз!`,
+                  content: `Тек "YES" немесе "NO" деп жауап бер. 
+                  Егер пайдаланушы сұрағы мен база сұрағы бір тақырыпта болса, "YES" деп жауап бер. 
+                  Егер олар әртүрлі тақырыпта болса, "NO" деп жауап бер.`,
                 },
                 {
                   role: "user",
@@ -242,48 +232,52 @@ class AIController {
 
           const openAiResponse =
             relevanceCheckResponse?.data?.choices?.[0]?.message?.content?.trim();
-
           console.log(`🧠 Ответ от OpenAI: "${openAiResponse}"`);
 
           const isRelevant = openAiResponse?.toUpperCase() === "YES";
 
-          if (typeof isRelevant === "undefined") {
-            console.log(
-              "⚠️ OpenAI не дал ответа. Считаем релевантным по умолчанию."
-            );
-            finalAnswer = metadata.answer;
-          } else if (isRelevant) {
+          if (isRelevant) {
             console.log(
               "✅ Вопрос релевантен. Используем ответ:",
               metadata.answer
             );
             finalAnswer = metadata.answer;
-          } else {
-            console.log("❌ Вопрос не совпадает. Отправляем шаблон.");
-            finalAnswer = templateAnswer;
           }
         }
-      } else {
-        console.log("❌ Ничего не найдено в базе. Отправляем шаблон.");
-        finalAnswer = templateAnswer;
       }
 
-      // Если в ответе есть ключевые слова, добавляем инфо о менеджере
-      const serviceKeywords = [
-        "құжат",
-        "жәрдемақы",
-        "ипотека",
-        "грант",
-        "бизнес-жоспар",
-        "субсидия",
-        "страховка",
-        "зейнетақы",
-      ];
+      // Если вопрос — просто вежливость, даем мягкий ответ
+      const politeResponses = {
+        рахмет: "Сізге де рахмет! 😊",
+        спасибо: "Рақмет! Көмектесе алсам, қуаныштымын! 🌟",
+        қалайсыз: "Жақсы, рахмет! Сіз қалайсыз?",
+        здравствуйте: "Сәлеметсіз бе! Қалай көмектесе аламын?",
+      };
+
+      const normalizedQuestion = question.toLowerCase().trim();
+      if (politeResponses[normalizedQuestion]) {
+        finalAnswer = politeResponses[normalizedQuestion];
+      }
+
+      // Добавляем информацию о менеджере, если её нет в ответе
+      const managerInfo = `
+\n\nБұл автоматты ИИ асистент жауабы. Егер сізге Айдана Асқарқызы көмегі қажет болса немесе консультация әзірге менеджерге жазыңыз:
+Менеджер есімі Ақерке
+WhatsApp: +7 747 724 07 99
+
+Егер ақылы консультация алғыңыз келсе құны 5000, төлем жасап тікелей өзіме звандай берсеңіз болады!`;
+
       if (
-        serviceKeywords.some((word) => finalAnswer.toLowerCase().includes(word))
+        !finalAnswer.includes("Ақерке") &&
+        !finalAnswer.includes("WhatsApp")
       ) {
-        finalAnswer +=
-          "\n\n📌 Толық ақпарат және қызметке жазылу үшін менің менеджеріме жазыңыз: Ақерке, WhatsApp: +7 747 724 0799.";
+        finalAnswer += managerInfo;
+      }
+
+      // Если вообще нет ответа, даем стандартный текст
+      if (!finalAnswer || finalAnswer === "Кешіріңіз, жауап бере алмаймын") {
+        finalAnswer =
+          "Бұл автоматты ИИ көмекшісі. Сізге қосымша ақпарат қажет пе?";
       }
 
       // Удаляем старые сообщения, если их больше 3
