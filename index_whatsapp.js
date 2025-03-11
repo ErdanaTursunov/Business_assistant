@@ -99,7 +99,7 @@ app.get("/status", async (req, res) => {
   res.json({ authenticated: isAuthenticated });
 });
 
-// Выход из WhatsApp и очистка сессии
+
 app.post("/logout", async (req, res) => {
   try {
     if (client) {
@@ -117,7 +117,7 @@ app.post("/logout", async (req, res) => {
 
     console.log("🔄 Перезапуск сервера...");
     res.sendStatus(200);
-
+    
     // Завершаем процесс, чтобы сервер перезапустился (PM2 или nodemon поднимут его снова)
     process.exit(0);
   } catch (error) {
@@ -126,7 +126,8 @@ app.post("/logout", async (req, res) => {
   }
 });
 
-// Запуск сервера
+
+
 const start = async () => {
   try {
     await sequelize.authenticate();
@@ -140,3 +141,4 @@ const start = async () => {
 };
 
 start();
+

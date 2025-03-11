@@ -48,7 +48,7 @@ class PineconeLarge {
         return res.json([]); // Если ничего не найдено, возвращаем пустой массив
       }
 
-      const MIN_SCORE_THRESHOLD = 0.5;
+      const MIN_SCORE_THRESHOLD = 0.4;
       const maxScore = results.matches[0]?.score || 0;
 
       // Фильтруем: оставляем только те, у которых score >= 90% от maxScore и не ниже порога
